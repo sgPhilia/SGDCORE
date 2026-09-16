@@ -1,0 +1,2 @@
+add_executable(sgdcore_benchmark benchmark_tape.cpp)
+target_link_libraries(sgdcore_benchmark PRIVATE sgdcore benchmark::benchmark_main)

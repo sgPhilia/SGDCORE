@@ -1,0 +1,5 @@
+add_executable(sgdcore_example_simple simple.cpp)
+target_link_libraries(sgdcore_example_simple PRIVATE sgdcore)
+
+add_executable(sgdcore_example_chain chain.cpp)
+target_link_libraries(sgdcore_example_chain PRIVATE sgdcore)
