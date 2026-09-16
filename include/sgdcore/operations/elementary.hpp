@@ -1,22 +1,10 @@
 #pragma once
 
 #include "sgdcore/core/var.hpp"
+#include "sgdcore/operations/detail.hpp"
 #include "sgdcore/operations/traits.hpp"
 
-#include <stdexcept>
-
 namespace sgdcore {
-
-namespace detail {
-
-template <typename T>
-void check_same_tape(const Var<T>& a, const Var<T>& b) {
-    if (a.tape() != b.tape()) {
-        throw std::invalid_argument("Operands belong to different tapes");
-    }
-}
-
-} // namespace detail
 
 #define SGDCORE_UNARY_FUNCTION(NAME, OPCODE)                          \
     template <typename T>                                             \

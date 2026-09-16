@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sgdcore/core/node_id.hpp"
+#include "sgdcore/core/nodeid.hpp"
 #include "sgdcore/core/opcode.hpp"
 #include "sgdcore/core/node.hpp"
 #include "sgdcore/core/tape.hpp"

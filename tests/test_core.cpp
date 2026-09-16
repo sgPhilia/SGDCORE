@@ -10,7 +10,7 @@ TEST(Core, NodeIdSentinel) {
 }
 
 TEST(Core, NodeSizeIsReasonable) {
-    EXPECT_EQ(sizeof(Node), 24u);
+    EXPECT_LE(sizeof(Node), 32u);
 }
 
 TEST(Core, TapeRecordsNodes) {

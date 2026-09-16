@@ -1,6 +1,6 @@
 #pragma once
 
-#include "node.hpp"
+#include "sgdcore/core/node.hpp"
 #include <cstddef>
 #include <vector>
 

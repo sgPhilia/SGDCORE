@@ -82,7 +82,7 @@ NodeId Tape::record(OpCode op, NodeId lhs, NodeId rhs, double value) {
         throw std::overflow_error("Tape node capacity exceeded");
     }
     const NodeId id = static_cast<NodeId>(nodes_.size());
-    nodes_.push_back(Node{op, lhs, rhs, value, 0.0});
+    nodes_.push_back(Node{value, 0.0, lhs, rhs, op});
     return id;
 }
 
