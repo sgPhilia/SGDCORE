@@ -1,35 +1,40 @@
-# SGDCORE v0.1 Design
+# SGDCORE Design
 
-## Goals
+## What SGDCORE is
 
-- Provide a correct, minimal reverse-mode AD foundation.
-- Keep the public API small and explicit.
-- Avoid implicit global state, virtual dispatch per node, and unnecessary dependencies.
+SGDCORE is a small C++20 library for scalar reverse-mode automatic
+differentiation. It records a computational graph into an explicit `Tape`,
+then walks that graph backward to compute gradients.
 
-## Core abstractions
+The project is intentionally minimal. It does not include tensors, neural
+networks, GPU support, expression templates, or multithreading.
 
-- **NodeId**: lightweight 32-bit handle with a reserved sentinel value.
-- **OpCode**: compact 8-bit enumeration of supported operations.
-- **Node**: plain struct storing opcode, operand handles, cached forward value, and adjoint.
-- **Tape**: owns a contiguous vector of nodes, records operations, and performs backward propagation.
-- **Var<T>**: non-owning handle to a tape and a node id.
+## Core types
 
-## Forward evaluation
+| Type | Purpose |
+|------|---------|
+| `NodeId` | 32-bit handle to a node in the tape. |
+| `OpCode` | Tag identifying the operation stored in a node. |
+| `Node` | POD-like struct: opcode, two parent ids, forward value, adjoint. |
+| `Tape` | Owns a `std::vector<Node>` and runs the backward pass. |
+| `Var<T>` | Non-owning handle to a node in a specific `Tape`. |
+| `OperationTraits<OpCode>` | Forward and derivative functions for each operation. |
 
-Every operator records a new node whose forward value is computed immediately using `OperationTraits<OpCode>::forward`. This keeps backward propagation simple because node values are already available.
+## Tape ownership
 
-## Backward propagation
+Every `Var<T>` stores a pointer to the `Tape` that owns its node. This makes
+dependencies explicit and prevents accidental use of a `Var` after its tape
+has been destroyed.
 
-Because nodes are recorded in evaluation order and operands always reference earlier nodes, a single reverse traversal from the root node to node 0 correctly accumulates adjoints. This handles multiple usages automatically.
+## Forward pass
 
-## Extensibility
+During expression evaluation, each operator creates a new node. The node's
+forward value is computed immediately by `OperationTraits<OpCode>::forward`.
+Values are cached so the backward pass does not recompute them.
 
-New operations can be added by:
+Example:
 
-1. Extending `OpCode`.
-2. Specializing `OperationTraits`.
-3. Adding the corresponding `Var<T>` operator or function overload.
-
-## Limitations
-
-v0.1 intentionally excludes tensors, GPU support, multithreading, and neural-network layers.
+```cpp
+auto x = sgdcore::variable(2.0, tape);
+auto y = sgdcore::variable(3.0, tape);
+auto z = x * y + sgdcore::sin(x);
