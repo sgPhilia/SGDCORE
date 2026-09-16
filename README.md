@@ -1,189 +1,337 @@
 # SGDCORE
 
-### C++20 Reverse-Mode Automatic Differentiation Core
+### Differentiable Computational Core
 
 [![CI](https://github.com/sgPhilia/SGDCORE/actions/workflows/ci.yml/badge.svg)](https://github.com/sgPhilia/SGDCORE/actions/workflows/ci.yml)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://isocpp.org/std/the-standard)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/sgPhilia/SGDCORE)](https://github.com/sgPhilia/SGDCORE/releases)
 
-SGDCORE is a small, explicit-tape C++20 library for scalar reverse-mode
-automatic differentiation. It records arithmetic and mathematical operations
-into a `Tape`, then traverses the recorded graph backward to compute exact
-gradients.
+SGDCORE is a lightweight **C++20 reverse-mode automatic differentiation core** for scalar computational graphs.
 
-The project is intentionally minimal: no global tape, no virtual dispatch per
-operation, no tensor framework, and no external runtime dependencies for the
-core library. It is designed as a transparent foundation for learning,
-experimenting with, and extending automatic differentiation in modern C++.
+It records arithmetic and mathematical operations into an explicit `Tape`, then traverses the recorded graph backward to propagate adjoints and obtain gradients.
+
+The project is intentionally small and inspectable. It is not a machine-learning framework, tensor library, or general-purpose numerical computing system.
+
+---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Why SGDCORE?](#why-sgdcore)
-- [Design Goals](#design-goals)
-- [Key Features](#key-features)
-- [Current Status](#current-status)
-- [Quick Start](#quick-start)
-- [Basic Usage](#basic-usage)
-- [How Automatic Differentiation Works](#how-automatic-differentiation-works)
-- [Computational Graph](#computational-graph)
-- [Reverse-Mode Differentiation](#reverse-mode-differentiation)
-- [Tape](#tape)
-- [Variables](#variables)
-- [Operations](#operations)
-- [Supported Operations](#supported-operations)
-- [API Overview](#api-overview)
-- [Building from Source](#building-from-source)
-- [Running Tests](#running-tests)
-- [Running Verification](#running-verification)
-- [Running Benchmarks](#running-benchmarks)
-- [Examples](#examples)
-- [Project Structure](#project-structure)
-- [Architecture](#architecture)
-- [Design Decisions](#design-decisions)
-- [Memory and Lifetime](#memory-and-lifetime)
-- [Correctness and Numerical Verification](#correctness-and-numerical-verification)
-- [Performance Considerations](#performance-considerations)
-- [Limitations](#limitations)
-- [Non-Goals](#non-goals)
-- [Roadmap](#roadmap)
-- [Development Guide](#development-guide)
-- [Adding a New Differentiable Operation](#adding-a-new-differentiable-operation)
-- [FAQ](#faq)
-- [License](#license)
+* [Overview](#overview)
+* [Motivation](#motivation)
+* [What is SGDCORE?](#what-is-sgdcore)
+* [Why a Differentiable Computational Core?](#why-a-differentiable-computational-core)
+* [Design Philosophy](#design-philosophy)
+* [Key Features](#key-features)
+* [Current Status](#current-status)
+* [Requirements](#requirements)
+* [Quick Start](#quick-start)
+* [Basic Usage](#basic-usage)
+* [How Automatic Differentiation Works](#how-automatic-differentiation-works)
+* [Reverse-Mode Automatic Differentiation](#reverse-mode-automatic-differentiation)
+* [Computational Graph](#computational-graph)
+* [Tape Architecture](#tape-architecture)
+* [Variables](#variables)
+* [Operations](#operations)
+* [Supported Operations](#supported-operations)
+* [Gradient Propagation](#gradient-propagation)
+* [Gradient Verification](#gradient-verification)
+* [Numerical Verification](#numerical-verification)
+* [Testing](#testing)
+* [Benchmarking](#benchmarking)
+* [API Overview](#api-overview)
+* [Project Structure](#project-structure)
+* [Architecture](#architecture)
+* [Memory and Lifetime](#memory-and-lifetime)
+* [Design Decisions](#design-decisions)
+* [Limitations](#limitations)
+* [Non-Goals](#non-goals)
+* [Roadmap](#roadmap)
+* [Development](#development)
+* [Extending SGDCORE](#extending-sgdcore)
+* [Adding a Differentiable Operation](#adding-a-differentiable-operation)
+* [Correctness Philosophy](#correctness-philosophy)
+* [Performance Philosophy](#performance-philosophy)
+* [FAQ](#faq)
+* [Contributing](#contributing)
+* [License](#license)
+
+---
 
 ## Overview
 
-Automatic differentiation (AD) is the process of evaluating the derivative of
-a function specified by a computer program. Unlike numerical differentiation,
-which approximates derivatives, AD applies the chain rule systematically
-through the sequence of elementary operations performed by the program.
-The result is an exact derivative up to floating-point round-off.
+Differentiable programming is the practice of constructing programs whose derivatives can be computed automatically.
 
-SGDCORE implements **reverse-mode automatic differentiation**. In reverse
-mode, the program first evaluates the function and records the computational
-graph, then propagates derivative information backward from the output to the
-inputs. This is particularly efficient when there is one scalar output and
-many inputs, because a single backward pass computes all input gradients.
+SGDCORE provides a small implementation of **reverse-mode automatic differentiation** in modern C++. The core workflow is:
 
-SGDCORE's current scope is deliberately narrow:
+1. Represent expressions as a computational graph.
+2. Record operations into an explicit `Tape`.
+3. Evaluate forward values.
+4. Traverse the graph backward.
+5. Accumulate adjoints.
+6. Read gradients from input variables.
 
-- Scalar `double` expressions.
-- Explicit `Tape` ownership.
-- A small set of arithmetic and elementary-function operations.
-- Unit tests, benchmarks, and finite-difference verification.
+SGDCORE is currently **scalar-first**. Its primary use case is scalar expressions represented through `Var<T>`, with `double` as the normal numerical type.
 
-It does not attempt to be a machine-learning framework, a tensor library, or
-a competitor to large-scale AD systems.
+Higher-dimensional abstractions such as tensors and matrices are outside the current v0.1 scope.
 
-## Why SGDCORE?
+---
 
-Most production AD libraries are large and optimized for specific workflows.
-While powerful, they can obscure the underlying mechanics of reverse-mode
-differentiation. SGDCORE exists to provide a small, readable implementation
-where the full path from a variable to a gradient is visible:
+## Motivation
+
+SGDCORE started as an exploration of how automatic differentiation can be implemented from first principles in modern C++.
+
+Instead of hiding the entire differentiation process behind a large framework, SGDCORE keeps the main mechanisms explicit:
 
 ```text
-Variable
-    │
-    ▼
-Operation
+Expression
     │
     ▼
 Computational Graph
     │
     ▼
-Tape
+Tape Recording
     │
     ▼
-Backward Pass
+Forward Evaluation
     │
     ▼
-Gradient
+Backward Propagation
+    │
+    ▼
+Gradients
 ```
 
-This makes SGDCORE useful for:
+The goal is to keep this path small enough to inspect, test, understand, and extend.
 
-- Understanding how reverse-mode AD works in practice.
-- Prototyping new operations or autodiff extensions.
-- Teaching the relationship between computational graphs and derivatives.
-- Building small, dependency-light C++ applications that need exact gradients.
+---
 
-SGDCORE does not claim to be faster or more feature-rich than established
-libraries. It claims to be small, explicit, and easy to inspect.
+## What is SGDCORE?
 
-## Design Goals
+The name **SGDCORE** refers to:
 
-- **Modern C++20**: use current language features while keeping the code
-  readable.
-- **Small API surface**: a new user should be productive with a handful of
-  functions and types.
-- **Explicit tape ownership**: every `Var<T>` belongs to a specific `Tape`,
-  making dependencies and lifetimes obvious.
-- **Reverse-mode differentiation**: compute gradients of scalar outputs with
-  respect to inputs in a single pass.
-- **Clear computational graph representation**: the tape directly represents
-  the graph as a sequence of nodes.
-- **Testability**: every operation has unit tests and finite-difference
-  verification where applicable.
-- **Minimal external dependencies**: the core library needs only CMake and a
-  C++20 compiler.
-- **Understandable implementation**: the code should be readable by a
-  competent C++ developer without specialized autodiff knowledge.
-- **Extensibility**: new operations can be added by extending `OpCode`,
-  specializing `OperationTraits`, and adding an operator or free function.
+> **Differentiable Computational Core**
+
+The name describes the project's focus on the underlying computational infrastructure of differentiable programs rather than specifically referring to stochastic gradient descent.
+
+For example:
+
+```cpp
+auto z = x * y + sgdcore::sin(x);
+```
+
+SGDCORE records the operations required to construct the expression as nodes in a computational graph.
+
+Conceptually:
+
+```text
+          z
+          │
+      ┌───┴───┐
+      │   +   │
+      └─┬───┬─┘
+        │   │
+       x*y sin(x)
+       │
+     ┌─┴─┐
+     x   y
+```
+
+After:
+
+```cpp
+sgdcore::backward(z);
+```
+
+the graph is traversed in reverse and the input adjoints become available through:
+
+```cpp
+sgdcore::gradient(x);
+sgdcore::gradient(y);
+```
+
+---
+
+## Why a Differentiable Computational Core?
+
+A small autodiff core can be useful for:
+
+* Mathematical optimization
+* Scientific computing
+* Sensitivity analysis
+* Numerical experimentation
+* Differentiable programming
+* Learning how automatic differentiation systems work
+
+The purpose of SGDCORE is not to provide every feature required by these fields.
+
+Instead, it focuses on making the fundamental mechanism understandable:
+
+```text
+operation
+   ↓
+node
+   ↓
+graph
+   ↓
+backward pass
+   ↓
+gradient
+```
+
+---
+
+## Design Philosophy
+
+### Small Core
+
+The core should remain small enough to read and understand without navigating a large framework.
+
+SGDCORE intentionally avoids unnecessary layers between the user expression and the computational graph.
+
+### Explicit Tape
+
+The computational graph is associated with an explicit `Tape`.
+
+This makes the lifetime and ownership of the recorded computation visible to the user.
+
+### C++20
+
+SGDCORE uses C++20 as its language baseline.
+
+The implementation relies on standard C++ facilities rather than compiler-specific extensions.
+
+### Correctness First
+
+Forward evaluation alone is not sufficient for an autodiff system.
+
+SGDCORE therefore validates derivative implementations through:
+
+* Unit tests
+* Analytical expectations
+* Finite-difference checks
+* Composed computational graphs
+
+### Minimal API
+
+The public interface is intentionally small.
+
+The core workflow can be expressed using:
+
+```cpp
+Tape
+Var<T>
+variable()
+constant()
+backward()
+gradient()
+value()
+```
+
+### Extensibility
+
+Operations are represented through operation identifiers and operation traits.
+
+This keeps forward evaluation and derivative rules associated with the same operation definition.
+
+---
 
 ## Key Features
 
-- C++20 scalar reverse-mode automatic differentiation.
-- Explicit `Tape` ownership with `Var<T>` handles.
-- Arithmetic operators: `+`, `-`, `*`, `/`, unary `-`.
-- Elementary functions: `sin`, `cos`, `tan`, `exp`, `log`, `sqrt`, `pow`.
-- Free functions for differentiation: `backward`, `gradient`, `value`.
-- Finite-difference verification utilities.
-- GoogleTest unit tests.
-- Google Benchmark performance benchmarks.
-- CMake build system.
-- GitHub Actions CI on Ubuntu, macOS, and Windows.
-- MIT license.
+* C++20 reverse-mode automatic differentiation
+* Explicit tape-based graph recording
+* Scalar differentiable variables through `Var<T>`
+* Arithmetic operations
+* Elementary mathematical functions
+* Gradient accumulation
+* Finite-difference verification utilities
+* GoogleTest-based tests
+* Google Benchmark-based benchmarks
+* CMake build system
+* GitHub Actions CI
+* MIT license
+
+---
 
 ## Current Status
 
-**Status: early-stage / v0.1**
+**Current stage: v0.1**
 
-The current release establishes the core reverse-mode differentiation engine
-and validates its correctness.
+SGDCORE v0.1 focuses on establishing a small, testable scalar reverse-mode autodiff core.
 
 ### Implemented
 
-- Scalar reverse-mode autodiff.
-- Core types: `Tape`, `Var<T>`, `Node`, `NodeId`, `OpCode`.
-- Operation traits for arithmetic and elementary functions.
-- `backward()` gradient propagation.
-- Unit tests covering core behavior, operations, autodiff, and verification.
-- Benchmarks for tape recording and backward-pass performance.
-- Usage examples.
-- CI pipeline.
+* Scalar reverse-mode automatic differentiation
+* `Tape`
+* `Var<T>`
+* `Node`
+* `NodeId`
+* `OpCode`
+* Arithmetic operations
+* Elementary mathematical functions
+* Backward propagation
+* Gradient accumulation
+* Finite-difference verification
+* Unit tests
+* Benchmarks
+* Examples
+* CI
 
 ### Planned
 
-- Additional mathematical operations.
-- User-defined operation hooks.
-- JVP/VJP abstractions.
-- Vector and matrix wrappers built on the scalar core.
-- Higher-order differentiation exploration.
+Potential future work includes:
+
+* Additional differentiable operations
+* Improved tape storage and memory reuse
+* Cleaner user-defined operation interfaces
+* Vector and matrix wrappers
+* More explicit JVP/VJP abstractions
+* Exploration of higher-order differentiation
+
+Planned items are not part of the current v0.1 API unless explicitly implemented.
+
+---
+
+## Requirements
+
+Typical requirements:
+
+* C++20-compatible compiler
+* CMake
+* Git
+
+The repository currently uses CMake for configuration and building, with GoogleTest and Google Benchmark used by the testing and benchmarking components.
+
+---
 
 ## Quick Start
+
+Clone the repository:
 
 ```bash
 git clone https://github.com/sgPhilia/SGDCORE.git
 cd SGDCORE
+```
 
+Configure a Release build:
+
+```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
+```
 
+Build:
+
+```bash
+cmake --build build -j
+```
+
+Run the tests:
+
+```bash
 ctest --test-dir build --output-on-failure
 ```
+
+---
 
 ## Basic Usage
 
@@ -201,235 +349,527 @@ int main() {
 
     sgdcore::backward(z);
 
-    std::cout << "z      = " << sgdcore::value(z)      << "\n";
-    std::cout << "dz/dx  = " << sgdcore::gradient(x)   << "\n";
-    std::cout << "dz/dy  = " << sgdcore::gradient(y)   << "\n";
+    std::cout << "z      = " << sgdcore::value(z) << '\n';
+    std::cout << "dz/dx  = " << sgdcore::gradient(x) << '\n';
+    std::cout << "dz/dy  = " << sgdcore::gradient(y) << '\n';
 
     return 0;
 }
 ```
 
-Output:
-
-```text
-z      = 6.9093
-dz/dx  = 2.58385
-dz/dy  = 2
-```
-
-### Line-by-line explanation
-
-- `sgdcore::Tape tape;` creates an empty tape that will own the computational
-  graph.
-- `sgdcore::variable(2.0, tape)` creates a differentiable input node with
-  value `2.0`.
-- `x * y + sgdcore::sin(x)` records multiplication, sine, and addition nodes
-  into the tape.
-- `sgdcore::backward(z)` starts reverse-mode differentiation at `z`.
-- `sgdcore::gradient(x)` returns the accumulated adjoint at `x`.
-
-Internally:
+For:
 
 ```text
 z = x * y + sin(x)
-∂z/∂x = y + cos(x) = 3.0 + cos(2.0) ≈ 2.58385
-∂z/∂y = x            = 2.0
 ```
+
+with:
+
+```text
+x = 2
+y = 3
+```
+
+the derivatives are:
+
+```text
+dz/dx = y + cos(x)
+      ≈ 2.583853163...
+
+dz/dy = x
+      = 2
+```
+
+---
 
 ## How Automatic Differentiation Works
 
-There are three common ways to compute derivatives:
+There are three common approaches to derivative computation.
 
-| Method | Basic Idea | Result | Typical Use |
-|--------|-----------|--------|-------------|
-| Numerical | Approximate with small perturbations | Approximate | Quick checks, black-box functions |
-| Symbolic | Manipulate mathematical expressions | Exact formula | Computer algebra systems |
-| Automatic | Propagate derivatives through program operations | Exact (up to round-off) | Machine learning, optimization, physics |
+| Method                    | Approach                                          | Typical Result                          |
+| ------------------------- | ------------------------------------------------- | --------------------------------------- |
+| Numerical differentiation | Evaluate perturbed inputs                         | Approximation                           |
+| Symbolic differentiation  | Manipulate mathematical expressions               | Symbolic formula                        |
+| Automatic differentiation | Apply derivative rules through program operations | Derivative of the evaluated computation |
 
-SGDCORE uses automatic differentiation because it combines the exactness of
-symbolic differentiation with the ability to handle arbitrary program
-control flow, provided that flow can be expressed as a sequence of
-differentiable operations.
+### Numerical Differentiation
+
+A central finite difference approximates:
+
+```text
+f'(x) ≈ [f(x + h) - f(x - h)] / (2h)
+```
+
+It is useful for verification but is affected by truncation and floating-point round-off.
+
+### Symbolic Differentiation
+
+Symbolic differentiation transforms mathematical expressions into other mathematical expressions.
+
+For example:
+
+```text
+f(x) = x² + sin(x)
+```
+
+can be transformed into:
+
+```text
+f'(x) = 2x + cos(x)
+```
+
+### Automatic Differentiation
+
+Automatic differentiation decomposes a computation into elementary operations and applies the chain rule to those operations.
+
+It does not approximate the derivative through perturbation.
+
+Its numerical result is nevertheless subject to floating-point arithmetic.
+
+---
+
+## Reverse-Mode Automatic Differentiation
+
+SGDCORE uses reverse-mode automatic differentiation.
+
+The process can be viewed as two major stages.
+
+### Forward Pass
+
+The expression is evaluated while the computational graph is recorded.
+
+```text
+Inputs
+  │
+  ▼
+Operations
+  │
+  ▼
+Forward values
+  │
+  ▼
+Recorded graph
+```
+
+### Backward Pass
+
+The graph is traversed in reverse.
+
+```text
+Output adjoint
+      │
+      ▼
+Local derivatives
+      │
+      ▼
+Parent adjoints
+      │
+      ▼
+Input gradients
+```
+
+For a scalar output `z`, the reverse pass begins with:
+
+```text
+dz/dz = 1
+```
+
+The chain rule is then applied at every node.
+
+For:
+
+```text
+z = x * y + sin(x)
+```
+
+we obtain:
+
+```text
+dz/dx = y + cos(x)
+
+dz/dy = x
+```
+
+The main advantage of reverse mode is that a single backward traversal can produce derivatives with respect to many inputs when the output is scalar.
+
+---
 
 ## Computational Graph
 
-A computational graph is a directed acyclic graph where:
+A computational graph represents a computation as connected operations and values.
 
-- **Nodes** represent values.
-- **Edges** represent dependencies between values.
-- **Operations** transform input nodes into output nodes.
-
-For the expression:
-
-```cpp
-auto z = x * y + sgdcore::sin(x);
-```
-
-the graph looks like:
+Conceptually:
 
 ```text
-      x ────┐
-            ▼
-            * ◄──── y
-            │
-            ▼
-            + ────► z
-           ▲
-           │
-      x ──► sin
+Input Variables
+      │
+      ▼
+  Operations
+      │
+      ▼
+ Intermediate Values
+      │
+      ▼
+    Output
 ```
 
-Each node stores:
+SGDCORE records the graph as `Node` objects associated with a `Tape`.
 
-- The operation that produced it.
-- Its parent node ids.
-- Its forward value.
-- Its adjoint (accumulated during backward propagation).
+A node represents a recorded computation and may contain information such as:
 
-The tape records nodes in the order they are created, which is a topological
-order of the graph.
+| Component            | Purpose                                    |
+| -------------------- | ------------------------------------------ |
+| Operation identifier | Identifies the operation                   |
+| Parent references    | Identify dependencies                      |
+| Forward value        | Stores the evaluated value                 |
+| Adjoint              | Stores accumulated reverse-mode derivative |
 
-## Reverse-Mode Differentiation
+The exact internal representation should be considered an implementation detail rather than part of the high-level user API.
 
-Reverse-mode differentiation computes the gradient of a scalar output with
-respect to all inputs in two phases:
+---
 
-1. **Forward phase**: evaluate the function and record the graph.
-2. **Backward phase**: propagate adjoints from the output back to the inputs.
+## Tape Architecture
 
-Starting from the output node with adjoint `1.0`, each operation distributes
-its adjoint to its parents according to the chain rule.
+The `Tape` is the central storage object for a recorded computation.
 
-For `z = x * y + sin(x)`:
+Conceptually:
 
 ```text
-Forward:
-  a = x * y
-  b = sin(x)
-  z = a + b
-
-Backward:
-  ∂z/∂z = 1
-  ∂z/∂a = 1
-  ∂z/∂b = 1
-  ∂z/∂x = ∂z/∂a * ∂a/∂x + ∂z/∂b * ∂b/∂x
-        = 1 * y + 1 * cos(x)
-        = y + cos(x)
-  ∂z/∂y = ∂z/∂a * ∂a/∂y
-        = 1 * x
-        = x
+Tape
+ │
+ ├── Node 0
+ ├── Node 1
+ ├── Node 2
+ ├── Node 3
+ └── ...
 ```
 
-This is why reverse mode is efficient for scalar outputs: every input
-gradient is obtained in one backward traversal.
+Each recorded operation produces another graph node.
 
-## Tape
+The tape provides the storage required for:
 
-`Tape` is the central owner of the computational graph.
+* Input variables
+* Constants
+* Intermediate results
+* Operation information
+* Forward values
+* Backward adjoints
 
-Responsibilities:
+### Why an Explicit Tape?
 
-- Allocate and store `Node` objects.
-- Create variable and constant nodes.
-- Record the result of each operation as a new node.
-- Run the backward pass.
-- Clear adjoints or reset state.
+Explicit tape ownership makes the computational context visible.
 
-`Tape` stores nodes in a `std::vector<Node>`. Each operation appends one
-node, so node ids are increasing and parents always have smaller ids than
-their children. This ordering makes a single reverse pass sufficient.
-
-### Why explicit tape ownership?
-
-An explicit tape makes several things clear:
-
-- Which graph a `Var<T>` belongs to.
-- When the graph is destroyed.
-- That gradients are scoped to a specific computation.
-- That mixing variables from different graphs is an error.
+For example:
 
 ```cpp
 sgdcore::Tape tape;
+
 auto x = sgdcore::variable(1.0, tape);
-// x is valid only as long as tape exists.
 ```
+
+`x` references a node associated with `tape`.
+
+This makes the lifetime relationship between the graph and its handles explicit.
+
+---
 
 ## Variables
 
-`Var<T>` is a lightweight, non-owning handle to a node in a `Tape`.
+`Var<T>` is a lightweight handle referring to a recorded node.
 
-Default: `Var<double>`.
+Typical construction:
 
-- `variable(value, tape)` creates an input node whose gradient is computed.
-- `constant(value, tape)` creates a fixed-value node.
-- `value(var)` returns the forward value.
-- `gradient(var)` returns the accumulated adjoint after `backward`.
+```cpp
+auto x = sgdcore::variable(2.0, tape);
+```
 
-Variables and constants differ only in their `OpCode`. Both participate in
-the graph, but the backward pass skips leaf nodes when propagating.
+A constant can be constructed with:
+
+```cpp
+auto c = sgdcore::constant(5.0, tape);
+```
+
+Values can be accessed with:
+
+```cpp
+sgdcore::value(x);
+```
+
+After a backward pass, gradients can be accessed with:
+
+```cpp
+sgdcore::gradient(x);
+```
+
+The primary numerical use case in v0.1 is `double`.
+
+### Variable vs Constant
+
+Variables participate in differentiation as inputs.
+
+Constants participate in forward computation but do not represent differentiable input parameters.
+
+---
 
 ## Operations
 
-Every differentiable operation in SGDCORE is represented by:
+An operation connects input nodes to a newly recorded output node.
 
-1. An `OpCode` value.
-2. A specialization of `OperationTraits<OpCode>` defining forward evaluation
-   and partial derivatives.
-3. An operator or free function that records the operation on the tape.
-
-When you write:
+For example:
 
 ```cpp
 auto z = x + y;
 ```
 
-SGDCORE:
+conceptually performs:
 
-1. Looks up the forward result using `OperationTraits<OpCode::Add>::forward`.
-2. Records a new node with opcode `Add` and parents `x` and `y`.
-3. Returns a `Var<T>` handle to the new node.
+```text
+x ─────┐
+       │
+       ▼
+      add ───► z
+       ▲
+       │
+y ─────┘
+```
 
-During `backward`, the tape uses the same traits to compute partial
-derivatives and accumulate adjoints into the parents.
+An operation needs two kinds of information:
+
+1. How to compute its forward value.
+2. How to compute its local derivatives during the backward pass.
+
+SGDCORE associates operation definitions with `OpCode` and `OperationTraits`.
+
+---
 
 ## Supported Operations
 
 ### Arithmetic
 
-| Operation | C++ | Expression | Partial Derivatives |
-|-----------|-----|------------|---------------------|
-| Addition | `x + y` | `x + y` | `∂/∂x = 1`, `∂/∂y = 1` |
-| Subtraction | `x - y` | `x - y` | `∂/∂x = 1`, `∂/∂y = -1` |
-| Multiplication | `x * y` | `x * y` | `∂/∂x = y`, `∂/∂y = x` |
-| Division | `x / y` | `x / y` | `∂/∂x = 1/y`, `∂/∂y = -x / y²` |
-| Negation | `-x` | `-x` | `∂/∂x = -1` |
+| Operation      | Expression | Derivative               |
+| -------------- | ---------- | ------------------------ |
+| Addition       | `x + y`    | `dx = 1`, `dy = 1`       |
+| Subtraction    | `x - y`    | `dx = 1`, `dy = -1`      |
+| Multiplication | `x * y`    | `dx = y`, `dy = x`       |
+| Division       | `x / y`    | `dx = 1/y`, `dy = -x/y²` |
+| Negation       | `-x`       | `dx = -1`                |
 
-### Elementary functions
+### Elementary Functions
 
-| Function | C++ | Derivative |
-|----------|-----|------------|
-| Sine | `sin(x)` | `cos(x)` |
-| Cosine | `cos(x)` | `-sin(x)` |
-| Tangent | `tan(x)` | `1 / cos²(x)` |
-| Exponential | `exp(x)` | `exp(x)` |
-| Natural log | `log(x)` | `1 / x` |
-| Square root | `sqrt(x)` | `1 / (2 * sqrt(x))` |
-| Power | `pow(x, y)` | `∂/∂x = y * x^(y-1)`, `∂/∂y = x^y * log(x)` |
+| Function          | Expression  | Derivative                         |
+| ----------------- | ----------- | ---------------------------------- |
+| Sine              | `sin(x)`    | `cos(x)`                           |
+| Cosine            | `cos(x)`    | `-sin(x)`                          |
+| Tangent           | `tan(x)`    | `1/cos²(x)`                        |
+| Exponential       | `exp(x)`    | `exp(x)`                           |
+| Natural logarithm | `log(x)`    | `1/x`                              |
+| Square root       | `sqrt(x)`   | `1/(2sqrt(x))`                     |
+| Power             | `pow(x, y)` | `∂x = yx^(y-1)`, `∂y = x^y log(x)` |
 
-Only these operations are currently implemented.
+The derivative of `pow(x, y)` with respect to `y` requires a domain in which `log(x)` is defined.
+
+Domain restrictions of the underlying mathematical functions still apply.
+
+---
+
+## Gradient Propagation
+
+Reverse-mode differentiation propagates adjoints through the graph.
+
+For:
+
+```cpp
+auto z = x * y;
+```
+
+the local derivatives are:
+
+```text
+∂z/∂x = y
+∂z/∂y = x
+```
+
+If the output has adjoint `a`, the contributions become:
+
+```text
+adjoint(x) += a * y
+adjoint(y) += a * x
+```
+
+### Gradient Accumulation
+
+A node can contribute to the same variable through multiple paths.
+
+For example:
+
+```cpp
+auto y = x * x + x;
+```
+
+mathematically:
+
+```text
+y = x² + x
+```
+
+therefore:
+
+```text
+dy/dx = 2x + 1
+```
+
+The backward pass must accumulate both contributions to `x`.
+
+This accumulation is fundamental to reverse-mode automatic differentiation.
+
+---
+
+## Gradient Verification
+
+SGDCORE uses finite differences as an independent numerical check of derivative implementations.
+
+For a scalar function:
+
+```text
+f'(x) ≈ [f(x + h) - f(x - h)] / (2h)
+```
+
+This can detect:
+
+* Sign errors
+* Incorrect derivative factors
+* Incorrect operation implementations
+* Errors in composed expressions
+
+Finite differences are approximate and therefore provide validation evidence rather than a mathematical proof.
+
+---
+
+## Numerical Verification
+
+A typical verification workflow is:
+
+```text
+             Analytical AD
+                  │
+                  ▼
+              Gradient
+                  │
+                  │ compare
+                  ▼
+          Finite Difference
+                  │
+                  ▼
+              Difference
+```
+
+For example:
+
+```cpp
+double fd =
+    sgdcore::central_difference(f, x_value, 1e-5);
+```
+
+The result can then be compared using an appropriate numerical tolerance.
+
+### Step Size
+
+The finite-difference step size affects accuracy.
+
+A step that is too large can increase truncation error.
+
+A step that is too small can increase floating-point cancellation and round-off error.
+
+Therefore, a value such as:
+
+```text
+1e-5
+```
+
+should be treated as a starting point rather than a universal optimal value.
+
+---
+
+## Testing
+
+SGDCORE uses GoogleTest for automated testing.
+
+The repository contains dedicated tests covering core behavior, operations, autodiff, and numerical verification.
+
+Build the test configuration:
+
+```bash
+cmake -S . -B build -DSGDCORE_BUILD_TESTS=ON
+cmake --build build -j
+```
+
+Run:
+
+```bash
+ctest --test-dir build --output-on-failure
+```
+
+The test suite is intended to verify several layers:
+
+```text
+Core behavior
+      ↓
+Operation behavior
+      ↓
+Autodiff behavior
+      ↓
+Numerical verification
+```
+
+---
+
+## Benchmarking
+
+SGDCORE includes Google Benchmark-based benchmarks.
+
+Configure:
+
+```bash
+cmake -S . -B build -DSGDCORE_BUILD_BENCHMARKS=ON
+```
+
+Build:
+
+```bash
+cmake --build build -j
+```
+
+Run:
+
+```bash
+./build/benchmarks/sgdcore_benchmark
+```
+
+Benchmark results depend on:
+
+* CPU
+* Compiler
+* Compiler flags
+* Standard library
+* Operating system
+* Build configuration
+
+Therefore, benchmark results should be interpreted in the context of the environment in which they were measured.
+
+---
 
 ## API Overview
 
-### Core types
+### Core Types
 
-| Type | Description |
-|------|-------------|
-| `sgdcore::Tape` | Owns the computational graph. |
-| `sgdcore::Var<T>` | Handle to a node; default `Var<double>`. |
-| `sgdcore::NodeId` | 32-bit handle to a node. |
-| `sgdcore::OpCode` | Tag identifying an operation. |
-| `sgdcore::Node` | Internal node struct. |
-| `sgdcore::OperationTraits<OpCode>` | Forward and derivative rules. |
+| Type                       | Purpose                            |
+| -------------------------- | ---------------------------------- |
+| `sgdcore::Tape`            | Stores a computational graph       |
+| `sgdcore::Var<T>`          | Handle to a graph node             |
+| `sgdcore::NodeId`          | Identifies a graph node            |
+| `sgdcore::Node`            | Internal graph node representation |
+| `sgdcore::OpCode`          | Identifies an operation            |
+| `sgdcore::OperationTraits` | Defines operation behavior         |
 
 ### Construction
 
@@ -441,23 +881,24 @@ auto c = sgdcore::constant(value, tape);
 ### Differentiation
 
 ```cpp
-sgdcore::backward(var);      // run reverse-mode AD from var
+sgdcore::backward(z);
 ```
 
-### Gradient access
+### Value and Gradient
 
 ```cpp
-double g = sgdcore::gradient(var);
-double v = sgdcore::value(var);
+double v = sgdcore::value(x);
+double g = sgdcore::gradient(x);
 ```
 
-### Mathematical operations
+### Mathematical Operations
 
 ```cpp
 auto a = x + y;
 auto b = x - y;
 auto c = x * y;
 auto d = x / y;
+
 auto e = -x;
 
 auto f = sgdcore::sin(x);
@@ -469,332 +910,250 @@ auto k = sgdcore::sqrt(x);
 auto l = sgdcore::pow(x, y);
 ```
 
-### Verification
-
-```cpp
-auto f = [](double v) { return std::sin(v); };
-double fd = sgdcore::central_difference(f, x.value(), 1e-5);
-```
-
-## Building from Source
-
-Requirements:
-
-- C++20 compiler (GCC 11+, Clang 14+, MSVC 2022)
-- CMake 3.14 or newer
-
-Default build:
-
-```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-```
-
-Build with all optional components:
-
-```bash
-cmake -S . -B build \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DSGDCORE_BUILD_TESTS=ON \
-    -DSGDCORE_BUILD_BENCHMARKS=ON \
-    -DSGDCORE_BUILD_EXAMPLES=ON
-cmake --build build -j
-```
-
-Build only the library:
-
-```bash
-cmake -S . -B build -DSGDCORE_BUILD_TESTS=OFF -DSGDCORE_BUILD_BENCHMARKS=OFF -DSGDCORE_BUILD_EXAMPLES=OFF
-cmake --build build -j
-```
-
-## Running Tests
-
-```bash
-cmake -S . -B build -DSGDCORE_BUILD_TESTS=ON
-cmake --build build -j
-ctest --test-dir build --output-on-failure
-```
-
-The test suite is organized into:
-
-- `test_core.cpp` — tape internals and node management.
-- `test_ops.cpp` — arithmetic and elementary-function evaluation.
-- `test_autodiff.cpp` — reverse-mode gradient correctness.
-- `test_verification.cpp` — finite-difference comparison tests.
-
-## Running Verification
-
-Verification tests compare SGDCORE gradients against central finite
-differences:
-
-```text
-f'(x) ≈ [f(x + h) - f(x - h)] / (2h)
-```
-
-Run them as part of the normal test suite:
-
-```bash
-ctest --test-dir build --output-on-failure
-```
-
-The `test_verification.cpp` file contains checks such as:
-
-```cpp
-auto f = [](double x) { return std::sin(x) * std::exp(x); };
-double ad = ad_gradient(x);
-double fd = sgdcore::central_difference(f, x, 1e-5);
-EXPECT_TRUE(sgdcore::close_enough(ad, fd, 1e-6, 1e-9));
-```
-
-Finite differences are a validation tool, not a proof of correctness. They
-catch implementation mistakes but introduce their own truncation and
-round-off error.
-
-## Running Benchmarks
-
-```bash
-cmake -S . -B build -DSGDCORE_BUILD_BENCHMARKS=ON
-cmake --build build -j
-./build/benchmarks/sgdcore_benchmark
-```
-
-The benchmark suite measures:
-
-- Cost of recording linear, multiplication, mixed, and unary-heavy graphs.
-- Cost of the backward pass for each graph shape.
-- Cost of clearing adjoints and resetting the tape.
-
-Benchmark output will vary by hardware and compiler; run locally for actual
-numbers.
-
-## Examples
-
-### `examples/simple.cpp`
-
-Demonstrates basic variables, arithmetic, `sin`, and gradient retrieval.
-
-```bash
-./build/examples/sgdcore_example_simple
-```
-
-### `examples/chain.cpp`
-
-Demonstrates a chained computation where the same variable is reused across
-multiple operations.
-
-```bash
-./build/examples/sgdcore_example_chain
-```
+---
 
 ## Project Structure
 
+The repository is organized around the core library, tests, benchmarks, examples, documentation, and build infrastructure.
+
 ```text
 SGDCORE/
-├── include/sgdcore/      Public headers
-│   ├── sgdcore.hpp       Single include
-│   ├── core/             Tape, Var, Node, NodeId, OpCode
-│   ├── operations/       OperationTraits, arithmetic, elementary functions
-│   ├── autodiff/         backward(), gradient(), value()
-│   └── verification/     finite_difference, tolerance
-├── src/                  Implementation
-│   └── tape.cpp
-├── tests/                GoogleTest tests
-├── benchmarks/           Google Benchmark benchmarks
-├── examples/             Usage examples
-├── docs/                 Architecture and design notes
-├── .github/workflows/    CI configuration
+├── .github/
+│   └── workflows/
+│
+├── include/
+│   └── sgdcore/
+│
+├── src/
+│
+├── tests/
+│
+├── benchmarks/
+│
+├── examples/
+│
+├── docs/
+│
 ├── CMakeLists.txt
 ├── README.md
 ├── CHANGELOG.md
 ├── LICENSE
-└── setup_repo.sh
+├── setup_repo.sh
+└── .gitignore
 ```
+
+The public umbrella header is:
+
+```cpp
+#include <sgdcore/sgdcore.hpp>
+```
+
+---
 
 ## Architecture
 
-SGDCORE's architecture is a pipeline:
+The high-level architecture can be summarized as:
 
 ```text
-             ┌─────────────┐
-             │    Var<T>   │
-             └──────┬──────┘
-                    │
-                    ▼
-             ┌─────────────┐
-             │  Operation  │
-             │   (OpCode)  │
-             └──────┬──────┘
-                    │
-                    ▼
-             ┌─────────────┐
-             │     Tape    │
-             └──────┬──────┘
-                    │
-                    ▼
-             ┌─────────────┐
-             │   Backward  │
-             └──────┬──────┘
-                    │
-                    ▼
-             ┌─────────────┐
-             │  Gradients  │
-             └─────────────┘
+                User Expression
+                       │
+                       ▼
+                 Var<T> Handles
+                       │
+                       ▼
+                  Operations
+                       │
+                       ▼
+                     Tape
+                       │
+                       ▼
+              Computational Graph
+                       │
+                       ▼
+                 backward()
+                       │
+                       ▼
+                  Adjoints
+                       │
+                       ▼
+                  gradient()
 ```
 
-A `Var<T>` is a handle. An operation creates a node on the tape. The tape
-stores the graph. `backward()` traverses the graph in reverse and fills in
-adjoints. `gradient()` reads those adjoints.
+The important separation is:
 
-## Design Decisions
+```text
+Var<T>
+  │
+  └── references graph state
 
-### Explicit Tape
+Operation
+  │
+  └── defines forward/local derivative behavior
 
-Requiring users to create and pass a `Tape` makes graph ownership explicit.
-There is no risk of accidentally mixing computations from different graphs,
-and the lifetime of every `Var<T>` is tied to a single, visible object.
+Tape
+  │
+  └── stores graph state
 
-### Scalar-First Design
+backward()
+  │
+  └── propagates adjoints
+```
 
-Starting with scalar `double` expressions keeps the initial core small. The
-tape, node, and operation traits can be understood without tensor notation
-or broadcast semantics. Higher-dimensional abstractions can be built on top
-later.
-
-### Reverse Mode
-
-Reverse mode is the natural starting point for a gradient-oriented library.
-A single backward pass yields all input gradients for a scalar output,
-matching common optimization and machine-learning use cases.
-
-### Small Core
-
-SGDCORE avoids expression templates, operator-overloading trickery, and
-large dependencies. The implementation is meant to be read and modified.
-
-### C++20
-
-C++20 provides a stable, widely supported baseline. SGDCORE uses it for
-standard library features and modern type traits without relying on
-experimental compiler extensions.
+---
 
 ## Memory and Lifetime
 
-- A `Tape` owns all nodes allocated during its lifetime.
-- A `Var<T>` stores a raw pointer to its tape and a node id.
-- Using a `Var<T>` after its `Tape` has been destroyed is undefined behavior.
-- `Tape::reset()` clears all nodes and invalidates all `Var<T>` handles from
-  that tape.
-- `Tape::clear_adjoints()` resets gradients without destroying the graph,
-  allowing multiple backward passes.
+The tape provides the lifetime context for graph nodes.
 
-These constraints match the current implementation.
+A `Var<T>` is a handle rather than an owner of the graph itself.
 
-## Correctness and Numerical Verification
-
-SGDCORE validates derivative implementations through several layers:
+Conceptually:
 
 ```text
-Implementation
+Tape
+ │
+ ├── Node
+ ├── Node
+ ├── Node
+ └── Node
+      ▲
       │
-      ▼
-Unit Tests (operation correctness)
-      │
-      ▼
-Analytical Expectations (known derivatives)
-      │
-      ▼
-Finite-Difference Verification
-      │
-      ▼
-Composed Graph Tests (chain rule, multiple usages)
+    Var<T>
 ```
 
-Finite differences provide an independent numerical check. They are not a
-formal proof, but they are effective at catching sign errors, missing
-factors, and incorrect partial derivatives.
+Therefore, code using a `Var<T>` must respect the lifetime of the associated `Tape`.
 
-## Performance Considerations
+When the tape is destroyed, the graph storage it owns is destroyed as well.
 
-Factors that influence SGDCORE performance:
+Operations that reset or clear graph state can also affect the validity of previously obtained handles, depending on the specific operation and implementation.
 
-- **Graph size**: more nodes mean more memory and more work in both forward
-  and backward passes.
-- **Tape allocation**: nodes are appended to a single vector; growth and
-  cache behavior matter for large graphs.
-- **Operation complexity**: elementary functions such as `sin`, `exp`, and
-  `pow` are more expensive than arithmetic.
-- **Backward traversal**: every non-leaf node visits its parents once.
-- **Multiple usages**: a node used several times accumulates gradients from
-  every path, which is correct but adds work.
+For this reason, graph lifetime should remain explicit in user code.
 
-The included benchmarks measure these characteristics across several graph
-shapes. No absolute performance claims are made.
+---
+
+## Design Decisions
+
+### Explicit Tape Ownership
+
+The graph is associated with a user-created `Tape` rather than a hidden global context.
+
+This makes computational state explicit.
+
+### Scalar-First Design
+
+Starting with scalar expressions keeps the initial implementation small.
+
+There are no tensor shapes, broadcasting rules, device abstractions, or matrix semantics in the core v0.1 design.
+
+### Reverse Mode
+
+Reverse mode is well suited to scalar-output functions where gradients with respect to multiple inputs are required.
+
+### Minimal Public API
+
+The core API intentionally exposes only the concepts required to construct expressions and differentiate them.
+
+### Verification
+
+Derivative implementations are treated as code that requires independent verification.
+
+Analytical tests and numerical checks complement each other.
+
+---
 
 ## Limitations
 
-SGDCORE currently does not provide:
+The current v0.1 scope does not include:
 
-- Tensor or matrix operations.
-- GPU acceleration.
-- Neural-network layers or optimizers.
-- Automatic batching.
-- Higher-order derivatives.
-- Expression templates for compile-time graph construction.
-- Multithreading support.
-- Integration with Eigen, NumPy, PyTorch, or other frameworks.
+* Tensor operations
+* Matrix operations
+* GPU backends
+* Neural-network layers
+* Optimizers
+* Automatic batching
+* Higher-order differentiation
+* Multithreaded graph execution
+* Framework integrations
+* Large-scale tensor computation
 
-These limitations are intentional for v0.1.
+These limitations describe the current scope of the project.
+
+---
 
 ## Non-Goals
 
-SGDCORE is not trying to become:
+SGDCORE is not intended to be:
 
-- A complete machine-learning framework.
-- A replacement for mature AD libraries such as Stan, autodiff, or Enzyme.
-- A tensor computation library.
-- A production-grade optimizer or solver.
+* A complete machine-learning framework
+* A tensor computation framework
+* A general numerical computing environment
+* A production optimizer or solver
+* A replacement for established automatic-differentiation systems
 
-It is a small, inspectable autodiff core.
+The project instead focuses on a small and inspectable differentiable computational core.
+
+---
 
 ## Roadmap
 
-### Current (v0.1)
+### v0.1
 
-- Scalar reverse-mode autodiff.
-- Core arithmetic and elementary functions.
-- Explicit tape ownership.
-- Unit tests, benchmarks, examples.
-- CI and documentation.
+* Scalar reverse-mode autodiff
+* Explicit tape
+* `Var<T>`
+* Core arithmetic operations
+* Elementary mathematical operations
+* Gradient accumulation
+* Numerical verification
+* Tests
+* Benchmarks
+* Examples
+* CI
 
 ### Next
 
-- Additional elementary and special functions.
-- Improved tape storage and memory reuse.
-- Cleaner user-defined operation interface.
+* Additional operations
+* Tape storage improvements
+* Memory reuse
+* Improved custom-operation interface
+* Expanded verification coverage
 
 ### Future
 
-- Vector and matrix wrappers built on the scalar core.
-- JVP/VJP abstractions.
-- Higher-order differentiation exploration.
-- Optional integrations with small linear-algebra libraries.
+* Vector and matrix wrappers
+* More explicit JVP/VJP abstractions
+* Higher-order differentiation exploration
+* Additional numerical integrations
 
-### Research / Exploration
+### Exploration
 
-- Static graph compilation.
-- Checkpointing and memory/recomputation trade-offs.
+Potential research directions include:
 
-No release dates are promised.
+* Checkpointing
+* Recomputation strategies
+* Alternative tape storage strategies
+* Static graph compilation
 
-## Development Guide
+Roadmap items are exploratory and do not imply a release schedule.
 
-Clone and configure:
+---
+
+## Development
+
+Clone:
 
 ```bash
 git clone https://github.com/sgPhilia/SGDCORE.git
 cd SGDCORE
-cmake -S . -B build -DSGDCORE_BUILD_TESTS=ON -DSGDCORE_BUILD_BENCHMARKS=ON -DSGDCORE_BUILD_EXAMPLES=ON
+```
+
+Configure a development build:
+
+```bash
+cmake -S . -B build \
+    -DSGDCORE_BUILD_TESTS=ON \
+    -DSGDCORE_BUILD_BENCHMARKS=ON \
+    -DSGDCORE_BUILD_EXAMPLES=ON
 ```
 
 Build:
@@ -815,64 +1174,265 @@ Run benchmarks:
 ./build/benchmarks/sgdcore_benchmark
 ```
 
-Run examples:
+Run examples when built:
 
 ```bash
 ./build/examples/sgdcore_example_simple
 ./build/examples/sgdcore_example_chain
 ```
 
-## Adding a New Differentiable Operation
+### CMake Options
 
-To add a new operation to SGDCORE:
+Available options should be kept synchronized with `CMakeLists.txt`.
 
-1. Add a value to `OpCode` in `include/sgdcore/core/opcode.hpp`.
-2. Specialize `OperationTraits<OpCode>` in
-   `include/sgdcore/operations/traits.hpp` with `forward`, `pdiff_lhs`, and
-   `pdiff_rhs` (or only `pdiff_lhs` for unary operations).
-3. Add an operator or free function in the appropriate header under
-   `include/sgdcore/operations/`.
-4. Add unit tests in `tests/`.
-5. Add finite-difference verification where applicable.
-6. Add a benchmark if performance is relevant.
-7. Update `README.md` and `docs/design.md`.
+Common project options include:
+
+| Option                     | Purpose              |
+| -------------------------- | -------------------- |
+| `SGDCORE_BUILD_TESTS`      | Build the test suite |
+| `SGDCORE_BUILD_BENCHMARKS` | Build benchmarks     |
+| `SGDCORE_BUILD_EXAMPLES`   | Build examples       |
+
+---
+
+## Extending SGDCORE
+
+SGDCORE is designed to grow from the scalar core outward.
+
+A typical extension workflow is:
+
+```text
+New Operation
+      │
+      ▼
+Operation Definition
+      │
+      ▼
+Forward Test
+      │
+      ▼
+Analytical Gradient Test
+      │
+      ▼
+Finite-Difference Test
+      │
+      ▼
+Benchmark
+      │
+      ▼
+Documentation
+```
+
+This keeps new functionality connected to the same correctness workflow as the existing operations.
+
+---
+
+## Adding a Differentiable Operation
+
+A new operation generally requires several pieces.
+
+### 1. Add the Operation Identifier
+
+Add the operation to the appropriate `OpCode` definition.
+
+### 2. Define Operation Behavior
+
+Add the corresponding operation traits.
+
+The implementation should define:
+
+* Forward evaluation
+* Local derivative with respect to the left input
+* Local derivative with respect to the right input where applicable
+
+### 3. Add the Public Operation
+
+Expose the operation through the appropriate function or operator.
+
+### 4. Add Tests
+
+Test:
+
+* Forward values
+* Basic edge cases
+* Analytical derivatives
+* Composed expressions
+
+### 5. Add Numerical Verification
+
+Where applicable, compare the analytical derivative against a finite-difference approximation.
+
+### 6. Add Benchmarks
+
+Add a benchmark when the operation or implementation introduces a meaningful performance consideration.
+
+### 7. Update Documentation
+
+Update:
+
+* Supported operations
+* API documentation
+* README
+* Design documentation
+
+---
+
+## Correctness Philosophy
+
+SGDCORE treats derivative correctness as a separate concern from forward computation.
+
+The verification pipeline is:
+
+```text
+              Implementation
+                    │
+                    ▼
+               Unit Tests
+                    │
+                    ▼
+          Analytical Expectations
+                    │
+                    ▼
+        Finite-Difference Checks
+                    │
+                    ▼
+          Composed Graph Tests
+```
+
+Each layer catches different classes of problems.
+
+For example, an operation may produce the correct forward value while containing an incorrect derivative rule.
+
+Finite differences provide an independent numerical check, but they are still subject to floating-point and approximation error.
+
+---
+
+## Performance Philosophy
+
+SGDCORE does not make a claim of being the fastest automatic differentiation system.
+
+Performance depends on implementation details and workload characteristics such as:
+
+* Number of graph nodes
+* Graph shape
+* Operation count
+* Memory allocation
+* Tape layout
+* Cache behavior
+* Backward traversal
+* Gradient accumulation
+* Cost of mathematical functions
+* Compiler optimization
+* Hardware
+
+The benchmark suite exists to provide measurements for the implementation and to make performance changes observable.
+
+---
 
 ## FAQ
 
-**What is SGDCORE?**  
-A small C++20 library for scalar reverse-mode automatic differentiation.
+### What is SGDCORE?
 
-**Why reverse-mode autodiff?**  
-It computes all input gradients for a scalar output in a single backward
-pass, which is efficient for optimization and machine-learning-style
-workloads.
+SGDCORE is a small C++20 core for scalar computational graphs and reverse-mode automatic differentiation.
 
-**Why is there a Tape?**  
-The tape owns the computational graph. Explicit ownership keeps lifetimes
-and dependencies clear.
+### Why is it called SGDCORE?
 
-**Why not use symbolic differentiation?**  
-Symbolic differentiation produces explicit formulas but struggles with
-arbitrary program control flow. AD handles program-defined functions
-directly.
+The name expands to **Differentiable Computational Core**. It refers to the computational core required for differentiable programs rather than specifically to stochastic gradient descent.
 
-**Why not use finite differences?**  
-Finite differences are simple but approximate and numerically fragile. AD
-computes exact derivatives up to floating-point round-off.
+### Why reverse-mode autodiff?
 
-**Does SGDCORE support tensors?**  
-No. v0.1 is scalar-only.
+Reverse mode can efficiently compute derivatives of many inputs with respect to a scalar output through a single backward traversal.
 
-**Is SGDCORE a machine-learning framework?**  
-No. It is a small autodiff core, not a framework.
+### Why use a Tape?
 
-**What C++ standard is required?**  
+The tape provides explicit storage and lifetime for the recorded computational graph.
+
+### What is an adjoint?
+
+An adjoint is the reverse-mode quantity propagated backward through the computational graph.
+
+For a node representing `v`, its adjoint can be interpreted as:
+
+```text
+∂output / ∂v
+```
+
+for the current scalar output.
+
+### Does SGDCORE use finite differences to calculate gradients?
+
+No.
+
+Finite differences are used for **verification**.
+
+The gradients themselves are computed through reverse-mode automatic differentiation.
+
+### Does SGDCORE support tensors?
+
+Not in the current v0.1 scalar core.
+
+### Does SGDCORE support GPUs?
+
+Not currently.
+
+### Is SGDCORE a machine-learning framework?
+
+No.
+
+It is an automatic differentiation core.
+
+### What C++ standard is required?
+
 C++20.
 
-**How are gradients computed?**  
-By recording operations into a tape and propagating adjoints backward
-through the recorded graph.
+### How are gradients calculated?
+
+Operations are recorded into a computational graph and the graph is traversed backward using the chain rule.
+
+### How are gradients verified?
+
+The implementation can compare autodiff results against finite-difference approximations.
+
+---
+
+## Contributing
+
+Contributions are welcome.
+
+Useful contributions include:
+
+* New differentiable operations
+* Additional test coverage
+* Numerical verification
+* Edge-case handling
+* Documentation improvements
+* Performance improvements
+* Bug fixes
+* Architecture improvements
+
+For a new differentiable operation, include where appropriate:
+
+* Forward-value tests
+* Analytical derivative tests
+* Finite-difference verification
+* Edge-case tests
+* Benchmark coverage
+* Documentation updates
+
+---
 
 ## License
 
-SGDCORE is released under the MIT License. See [LICENSE](LICENSE).
+SGDCORE is released under the MIT License.
+See [LICENSE](LICENSE) for the full license text.
+
+---
+
+## Final Note
+
+SGDCORE is intentionally small.
+The project focuses on one question:
+
+> **What is the smallest clear and testable core required to represent and differentiate a scalar computational graph in modern C++?**
+
+Everything else can be built on top of that foundation.
