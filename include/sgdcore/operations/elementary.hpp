@@ -4,6 +4,8 @@
 #include "sgdcore/operations/detail.hpp"
 #include "sgdcore/operations/traits.hpp"
 
+#include <type_traits>
+
 namespace sgdcore {
 
 #define SGDCORE_UNARY_FUNCTION(NAME, OPCODE)                          \
@@ -30,6 +32,18 @@ Var<T> pow(const Var<T>& base, const Var<T>& exponent) {
     const NodeId id = base.tape()->record(
         OpCode::Pow, base.node(), exponent.node(), v);
     return Var<T>(*base.tape(), id);
+}
+
+template <typename T, typename U>
+requires std::is_arithmetic_v<U>
+Var<T> pow(const Var<T>& base, U exponent) {
+    return pow(base, detail::scalar_constant_like(base, exponent));
+}
+
+template <typename U, typename T>
+requires std::is_arithmetic_v<U>
+Var<T> pow(U base, const Var<T>& exponent) {
+    return pow(detail::scalar_constant_like(exponent, base), exponent);
 }
 
 } // namespace sgdcore

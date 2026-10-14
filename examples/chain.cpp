@@ -5,10 +5,11 @@ int main() {
     sgdcore::Tape tape;
 
     auto x = sgdcore::variable(0.5, tape);
+    auto scale = sgdcore::constant(0.1, tape);
     auto y = x;
 
     for (int i = 0; i < 5; ++i) {
-        y = sgdcore::exp(y) + y * y;
+        y = sgdcore::exp(scale * y) + scale * y * y;
     }
 
     sgdcore::backward(y);

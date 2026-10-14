@@ -3,3 +3,9 @@ target_link_libraries(sgdcore_example_simple PRIVATE sgdcore)
 
 add_executable(sgdcore_example_chain chain.cpp)
 target_link_libraries(sgdcore_example_chain PRIVATE sgdcore)
+
+add_executable(sgdcore_example_finite_difference finite_difference.cpp)
+target_link_libraries(sgdcore_example_finite_difference PRIVATE sgdcore)
+
+add_executable(sgdcore_example_gradient_descent gradient_descent.cpp)
+target_link_libraries(sgdcore_example_gradient_descent PRIVATE sgdcore)

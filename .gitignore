@@ -1,6 +1,9 @@
 build/
+build-*/
 out/
 cmake-build-*/
+/install/
+/package-consumer-build/
 *.user
 .idea/
 .vscode/

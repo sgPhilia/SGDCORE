@@ -7,7 +7,7 @@ int main() {
     auto x = sgdcore::variable(2.0, tape);
     auto y = sgdcore::variable(3.0, tape);
 
-    auto z = x * y + sgdcore::sin(x);
+    auto z = x * y + sgdcore::sin(x) + 2.0;
 
     sgdcore::backward(z);
 

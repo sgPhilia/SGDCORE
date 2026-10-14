@@ -7,12 +7,13 @@ namespace sgdcore {
 
 template <typename T>
 void backward(const Var<T>& root) {
+    (void)root.value();
     root.tape()->backward(root.node());
 }
 
 template <typename T>
 double gradient(const Var<T>& wrt) {
-    return wrt.tape()->node(wrt.node()).adjoint;
+    return wrt.adjoint();
 }
 
 template <typename T>

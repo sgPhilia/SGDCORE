@@ -4,6 +4,8 @@
 #include "sgdcore/operations/detail.hpp"
 #include "sgdcore/operations/traits.hpp"
 
+#include <type_traits>
+
 namespace sgdcore {
 
 template <typename T>
@@ -36,6 +38,54 @@ Var<T> operator/(const Var<T>& a, const Var<T>& b) {
     const double v = OperationTraits<OpCode::Div>::forward(a.value(), b.value());
     const NodeId id = a.tape()->record(OpCode::Div, a.node(), b.node(), v);
     return Var<T>(*a.tape(), id);
+}
+
+template <typename T, typename U>
+requires std::is_arithmetic_v<U>
+Var<T> operator+(const Var<T>& a, U b) {
+    return a + detail::scalar_constant_like(a, b);
+}
+
+template <typename U, typename T>
+requires std::is_arithmetic_v<U>
+Var<T> operator+(U a, const Var<T>& b) {
+    return detail::scalar_constant_like(b, a) + b;
+}
+
+template <typename T, typename U>
+requires std::is_arithmetic_v<U>
+Var<T> operator-(const Var<T>& a, U b) {
+    return a - detail::scalar_constant_like(a, b);
+}
+
+template <typename U, typename T>
+requires std::is_arithmetic_v<U>
+Var<T> operator-(U a, const Var<T>& b) {
+    return detail::scalar_constant_like(b, a) - b;
+}
+
+template <typename T, typename U>
+requires std::is_arithmetic_v<U>
+Var<T> operator*(const Var<T>& a, U b) {
+    return a * detail::scalar_constant_like(a, b);
+}
+
+template <typename U, typename T>
+requires std::is_arithmetic_v<U>
+Var<T> operator*(U a, const Var<T>& b) {
+    return detail::scalar_constant_like(b, a) * b;
+}
+
+template <typename T, typename U>
+requires std::is_arithmetic_v<U>
+Var<T> operator/(const Var<T>& a, U b) {
+    return a / detail::scalar_constant_like(a, b);
+}
+
+template <typename U, typename T>
+requires std::is_arithmetic_v<U>
+Var<T> operator/(U a, const Var<T>& b) {
+    return detail::scalar_constant_like(b, a) / b;
 }
 
 template <typename T>

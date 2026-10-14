@@ -3,6 +3,7 @@
 #include "sgdcore/core/opcode.hpp"
 
 #include <cmath>
+#include <limits>
 
 namespace sgdcore {
 
@@ -75,7 +76,15 @@ struct OperationTraits<OpCode::Exp> {
 template <>
 struct OperationTraits<OpCode::Log> {
     static double forward(double a, double /*b*/) noexcept { return std::log(a); }
-    static double pdiff_lhs(double a, double /*b*/, double /*result*/) noexcept { return 1.0 / a; }
+    static double pdiff_lhs(double a, double /*b*/, double /*result*/) noexcept {
+        if (a < 0.0) {
+            return std::numeric_limits<double>::quiet_NaN();
+        }
+        if (a == 0.0) {
+            return std::numeric_limits<double>::infinity();
+        }
+        return 1.0 / a;
+    }
     static double pdiff_rhs(double /*a*/, double /*b*/, double /*result*/) noexcept { return 0.0; }
 };
 
@@ -92,7 +101,7 @@ struct OperationTraits<OpCode::Pow> {
     static double pdiff_lhs(double a, double b, double /*result*/) noexcept {
         return b * std::pow(a, b - 1.0);
     }
-    static double pdiff_rhs(double a, double b, double result) noexcept {
+    static double pdiff_rhs(double a, double /*b*/, double result) noexcept {
         return result * std::log(a);
     }
 };
